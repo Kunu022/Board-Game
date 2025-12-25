@@ -24,6 +24,7 @@ class Cell:
         self.surface = pygame.Surface(CELL_SIZE)
         self.surface.fill("white")
         self.rect = self.surface.get_rect()
+        self.value = 0
     def set_pin(self, value, color):
         self.value = value
         self.color = color
@@ -82,7 +83,7 @@ for i, pin in enumerate(PIN_TYPES):
     )
 
 selected_pin = None
-
+moving_pin = None
 running = True
 while True:
     for event in pygame.event.get():
@@ -91,20 +92,41 @@ while True:
         elif event.type == pygame.VIDEORESIZE:
             screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            #left click
             mouse_pos = event.pos
             for pin in pin_selectors:
-                if pin.is_clicked(mouse_pos):
+                if pin.is_clicked(mouse_pos) and selected_pin is not pin:
+                    print("selecting pin")
                     selected_pin = pin
                     for p in pin_selectors:
                         p.selected = False
                     pin.selected = True
                     break
+                elif pin.is_clicked(mouse_pos) and selected_pin is  pin:
+                    selected_pin = None
+                    pin.selected = False
+                    break
             else:
-                if selected_pin:
+                if selected_pin and not moving_pin:
                     for cell in cells:
-                        if cell.rect.collidepoint(mouse_pos):
+                        if cell.rect.collidepoint(mouse_pos) and cell.value == 0:
                             cell.set_pin(selected_pin.value, selected_pin.color)
                             break
+                else:
+                    for cell in cells:
+                        if cell.rect.collidepoint(mouse_pos) and cell.value != 0:
+                            moving_pin = (cell.value, cell.color,cell.row, cell.col)
+                            print("moving_pin", moving_pin)
+                            break
+                        elif cell.rect.collidepoint(mouse_pos) and cell.value == 0 and moving_pin is not None:
+                            cell.set_pin(moving_pin[0], moving_pin[1])
+                            for cell in cells:
+                                if cell.row == moving_pin[2] and cell.col == moving_pin[3]:
+                                    cell.set_pin(0, "white")
+                            moving_pin = None
+
+
+
     screen.fill("black")
     #pin buttons
     for pin in pin_selectors:
