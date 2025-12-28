@@ -1,4 +1,5 @@
 import pygame
+import math
 pygame.init()
 screen = pygame.display.set_mode((1000, 720), pygame.RESIZABLE)
 clock = pygame.time.Clock()
@@ -10,12 +11,42 @@ GRID_COLS = 6
 PIN_SIZE = (60, 60)
 PIN_MARGIN = 20
 
+
+DIRECTIONS = {
+    "N":  (-1,  0),
+    "NE": (-1,  1),
+    "E":  ( 0,  1),
+    "SE": ( 1,  1),
+    "S":  ( 1,  0),
+    "SW": ( 1, -1),
+    "W":  ( 0, -1),
+    "NW": (-1, -1),
+}
+
+ARROW = [
+    (0, 0),
+    (18, 8),
+    (0, 16),
+]
+
 PIN_TYPES = [
     {"value": 3, "color": "red", "health": 3},
     {"value": 2, "color": "green", "health": 2},
     {"value": 1, "color": "blue", "health": 1},
 ]
+PIN_TEXTURES = {
+    0: None,
+    1: pygame.image.load("assets/p1_rock.png").convert_alpha(),
+    2: pygame.image.load("assets/p1_lily.png").convert_alpha(),
+    3: pygame.image.load("assets/p1_lotus.png").convert_alpha(),
+    4: pygame.image.load("assets/p2_rock.png").convert_alpha(),
+    5: pygame.image.load("assets/p2_lily.png").convert_alpha(),
+    6: pygame.image.load("assets/p2_lotus.png").convert_alpha(),
 
+}
+for k, img in PIN_TEXTURES.items():
+    if img:
+        PIN_TEXTURES[k] = pygame.transform.scale(img, CELL_SIZE)
 
 class Cell:
     def __init__(self, row, col):
@@ -25,16 +56,29 @@ class Cell:
         self.surface.fill("white")
         self.rect = self.surface.get_rect()
         self.value = 0
-    def set_pin(self, value, color):
+        self.player = 0
+        self.image = 0
+        self.directions = set()
+
+    def set_pin(self, value, player,directions=None):
         self.value = value
-        self.color = color
-        self.surface.fill(color)
+        #self.color = color
+
+        self.image = PIN_TEXTURES[value]
+        self.player = player
+        self.directions = directions or set()
+        #self.surface.fill(color)
 
     def draw(self, surface, offset_x, offset_y):
         x = offset_x + self.col * (CELL_SIZE[0] + CELL_GAP)
         y = offset_y + self.row * (CELL_SIZE[1] + CELL_GAP)
         self.rect.topleft = (x, y)
-        surface.blit(self.surface, self.rect)
+        if self.image and self.image != 0:
+            surface.blit(self.image, self.rect)
+        else:
+            surface.blit(self.surface, self.rect)
+        for d in self.directions:
+            draw_arrow(surface, d, self.rect)
 
 cells = []
 for i in range(GRID_ROWS):
@@ -50,6 +94,50 @@ def get_grid_offset(screen_width, screen_height):
 
     return offset_x, offset_y
 
+def draw_arrow(surface, direction, rect, color="yellow"):
+    dr, dc = direction
+
+
+    angle = -math.degrees(math.atan2(-dr, dc))
+
+    # place arrow on edge
+    margin = 10
+    if dr == -1 and dc == 0:       # N
+        pos = rect.midtop
+    elif dr == 1 and dc == 0:      # S
+        pos = rect.midbottom
+    elif dr == 0 and dc == 1:      # E
+        pos = rect.midright
+    elif dr == 0 and dc == -1:     # W
+        pos = rect.midleft
+    elif dr == -1 and dc == 1:     # NE
+        pos = (rect.right - margin, rect.top + margin)
+    elif dr == 1 and dc == 1:      # SE
+        pos = (rect.right - margin, rect.bottom - margin)
+    elif dr == 1 and dc == -1:     # SW
+        pos = (rect.left + margin, rect.bottom - margin)
+    elif dr == -1 and dc == -1:    # NW
+        pos = (rect.left + margin, rect.top + margin)
+
+    cx, cy = pos
+    arrow = [(x + cx - 9, y + cy - 8) for x, y in ARROW]
+    arrow = rotate_points(arrow, angle, (cx, cy))
+
+    pygame.draw.polygon(surface, color, arrow)
+
+def rotate_points(points, angle_deg, center):
+    angle = math.radians(angle_deg)
+    cx, cy = center
+    rotated = []
+
+    for x, y in points:
+        x -= cx
+        y -= cy
+        rx = x * math.cos(angle) - y * math.sin(angle)
+        ry = x * math.sin(angle) + y * math.cos(angle)
+        rotated.append((rx + cx, ry + cy))
+
+    return rotated
 def end_turn():
     global selected_pin,turn,pin_counts_p1,pin_counts_p2,pin_counts
 
@@ -62,6 +150,59 @@ def end_turn():
         pin_counts = pin_counts_p1
     else:
         pin_counts = pin_counts_p2
+
+#checking if a move is legal
+def move_check(row1,col1,row2,col2):
+    print("destination:", row2, " ", col2)
+    if row1 == row2 and col1 == col2:
+        return False
+    else:
+        if row1 == row2:
+            for cell in cells:
+                if col1 > col2 and cell.row == row1:
+                    if col2 <= cell.col < col1 and cell.value != 0:
+                        print("bitch get out the way1")
+                        return False
+                elif col1 < col2 and cell.row == row1:
+                    if col1 < cell.col <= col2 and cell.value != 0:
+                        print("bitch get out the way2")
+                        return False
+
+            return True
+        elif col1 == col2:
+            for cell in cells:
+                if row1 > row2 and cell.col == col1:
+                    if row2 <= cell.row < row1 and cell.value != 0:
+                        print("bitch get out the way1")
+                        return False
+                elif row1 < row2 and cell.col == col1:
+                    if row1 < cell.row <= row2 and cell.value != 0:
+                        print("bitch get out the way2")
+                        return False
+            return True
+        elif abs(row2 - row1) == abs(col2 - col1):
+            print("diagonal")
+            for cell in cells:
+                if row1 > row2 and col1 > col2:
+                    if row2 <= cell.row < row1 and col2 <= cell.col < col1 and cell.value != 0:
+                        print("bitch get out the way1")
+                        return False
+                elif row1 > row2 and col1 < col2:
+                    if row2 <= cell.row < row1 and col1 < cell.col <= col2 and cell.value != 0:
+                        print("bitch get out the way2")
+                        return False
+                elif row1 < row2 and col1 > col2:
+                    if row1 < cell.row <= row2 and col2 <= cell.col < col1 and cell.value != 0:
+                        print("bitch get out the way3")
+                        return False
+                elif row1 < row2 and col1 < col2:
+                    if row1 < cell.row <= row2 and col1 < cell.col <= col2 and cell.value != 0:
+                        if row2 <= cell.row < row1 and col2 <= cell.col < col1 and cell.value != 0:
+                            print("bitch get out the way4")
+                            return False
+            return True
+    print("incorrect move")
+    return False
 
 class PinSelector:
     def __init__(self, x, y, size, value, color,health):
@@ -142,27 +283,31 @@ while True:
                     for cell in cells:
                         if cell.rect.collidepoint(mouse_pos) and cell.value == 0:
                             if turn == 0 and cell.row >= GRID_ROWS - 2:
-                                cell.set_pin(selected_pin.value, selected_pin.color)
+                                cell.set_pin(selected_pin.value, turn,{DIRECTIONS["NW"],DIRECTIONS["NE"]})
                                 pin_counts_p1[selected_pin.value] -= 1
                                 print(selected_pin.color, pin_counts_p1[selected_pin.value])
                                 end_turn()
                             elif turn == 1 and cell.row <= 1 :
-                                cell.set_pin(selected_pin.value, selected_pin.color)
+                                cell.set_pin(selected_pin.value + 3, turn,{DIRECTIONS["SE"],DIRECTIONS["SW"]})
                                 pin_counts_p2[selected_pin.value] -= 1
+                                cell.player = 1
                                 print(selected_pin.color, pin_counts_p2[selected_pin.value])
                                 end_turn()
                             break
                 #moving a pin
                 else:
                     for cell in cells:
-                        if cell.rect.collidepoint(mouse_pos) and cell.value != 0:
-                            moving_pin = (cell.value, cell.color,cell.row, cell.col)
+                        if cell.rect.collidepoint(mouse_pos) and cell.value != 0 and cell.player == turn:
+                            moving_pin = (cell.value, cell.player,cell.directions,cell.row, cell.col)
+                            print("moving: ", moving_pin)
                             break
                         elif cell.rect.collidepoint(mouse_pos) and cell.value == 0 and moving_pin is not None:
-                            cell.set_pin(moving_pin[0], moving_pin[1])
+                            if not move_check(moving_pin[3],moving_pin[4],cell.row,cell.col):
+                                break
+                            cell.set_pin(moving_pin[0], moving_pin[1],moving_pin[2])
                             for cell in cells:
-                                if cell.row == moving_pin[2] and cell.col == moving_pin[3]:
-                                    cell.set_pin(0, "white")
+                                if cell.row == moving_pin[3] and cell.col == moving_pin[4]:
+                                    cell.set_pin(0, None,None)
                             moving_pin = None
                             end_turn()
 
